@@ -98,6 +98,11 @@ class EmailService {
             $is_production = !empty($_ENV['APP_URL']) && strpos($_ENV['APP_URL'], 'localhost') === false && strpos($_ENV['APP_URL'], '127.0.0.1') === false;
             $disable_ssl_verify = isset($_ENV['SMTP_DISABLE_SSL_VERIFY']) && $_ENV['SMTP_DISABLE_SSL_VERIFY'] === 'true';
             
+            // Log SSL verification status for debugging
+            if ($is_production) {
+                error_log("EmailService SSL Config - Production: Yes, SMTP_DISABLE_SSL_VERIFY: " . ($disable_ssl_verify ? 'true' : 'false/not set'));
+            }
+            
             if ($is_production && $disable_ssl_verify) {
                 // Disable SSL verification for shared hosting with SSL interception
                 $mail->SMTPOptions = array(
@@ -108,6 +113,9 @@ class EmailService {
                     )
                 );
                 error_log("EmailService: SSL verification disabled for shared hosting");
+            } elseif ($is_production && !$disable_ssl_verify) {
+                // Log warning if production but SSL verify not disabled (might cause errors)
+                error_log("EmailService Warning: Production environment detected but SMTP_DISABLE_SSL_VERIFY not set to 'true'. If you get SSL certificate errors, add SMTP_DISABLE_SSL_VERIFY=true to .env");
             }
             
             // Enable verbose debug output for local development
