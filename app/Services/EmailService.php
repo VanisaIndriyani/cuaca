@@ -93,6 +93,23 @@ class EmailService {
             $mail->Port = $this->smtp_port;
             $mail->CharSet = 'UTF-8';
             
+            // Handle SSL certificate verification for shared hosting
+            // Some hosting providers use SSL interception/proxy which causes certificate mismatch
+            $is_production = !empty($_ENV['APP_URL']) && strpos($_ENV['APP_URL'], 'localhost') === false && strpos($_ENV['APP_URL'], '127.0.0.1') === false;
+            $disable_ssl_verify = isset($_ENV['SMTP_DISABLE_SSL_VERIFY']) && $_ENV['SMTP_DISABLE_SSL_VERIFY'] === 'true';
+            
+            if ($is_production && $disable_ssl_verify) {
+                // Disable SSL verification for shared hosting with SSL interception
+                $mail->SMTPOptions = array(
+                    'ssl' => array(
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                        'allow_self_signed' => true
+                    )
+                );
+                error_log("EmailService: SSL verification disabled for shared hosting");
+            }
+            
             // Enable verbose debug output for local development
             // But redirect to error_log to avoid "headers already sent" warning
             $is_production = !empty($_ENV['APP_URL']) && strpos($_ENV['APP_URL'], 'localhost') === false && strpos($_ENV['APP_URL'], '127.0.0.1') === false;
