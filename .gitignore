@@ -1,0 +1,9 @@
+.env
+/vendor/
+/node_modules/
+*.log
+.DS_Store
+Thumbs.db
+/public/uploads/
+/public/cache/
+
