@@ -43,12 +43,22 @@ class EmailService {
         // Check if PHPMailer is available
         $this->use_phpmailer = class_exists('PHPMailer\PHPMailer\PHPMailer') && !empty($this->smtp_user) && !empty($this->smtp_pass);
         
-        // Log configuration status for debugging (only in local)
+        // Log configuration status for debugging
         $is_production = !empty($_ENV['APP_URL']) && strpos($_ENV['APP_URL'], 'localhost') === false && strpos($_ENV['APP_URL'], '127.0.0.1') === false;
-        if (!$is_production && !$this->use_phpmailer) {
-            error_log("EmailService Debug: PHPMailer class exists: " . (class_exists('PHPMailer\PHPMailer\PHPMailer') ? 'Yes' : 'No'));
-            error_log("EmailService Debug: SMTP_USER: " . (!empty($this->smtp_user) ? 'Set (' . substr($this->smtp_user, 0, 5) . '...)' : 'Empty'));
-            error_log("EmailService Debug: SMTP_PASS: " . (!empty($this->smtp_pass) ? 'Set' : 'Empty'));
+        
+        // Always log configuration issues in production for debugging
+        if (!$this->use_phpmailer) {
+            $log_msg = "EmailService Config Issue - ";
+            $log_msg .= "PHPMailer: " . (class_exists('PHPMailer\PHPMailer\PHPMailer') ? 'Yes' : 'No') . ", ";
+            $log_msg .= "SMTP_USER: " . (!empty($this->smtp_user) ? 'Set' : 'Empty') . ", ";
+            $log_msg .= "SMTP_PASS: " . (!empty($this->smtp_pass) ? 'Set' : 'Empty') . ", ";
+            $log_msg .= "ENV File: " . (file_exists($envFile) ? 'Exists' : 'Not Found');
+            error_log($log_msg);
+        }
+        
+        // Log successful configuration in production (for troubleshooting)
+        if ($is_production && $this->use_phpmailer) {
+            error_log("EmailService: SMTP configured for production - Host: {$this->smtp_host}, Port: {$this->smtp_port}, User: " . substr($this->smtp_user, 0, 5) . "...");
         }
     }
     
@@ -122,13 +132,29 @@ class EmailService {
             
         } catch (Exception $e) {
             $error_info = isset($mail) ? $mail->ErrorInfo : 'PHPMailer not initialized';
-            error_log("PHPMailer Error: " . $error_info);
-            error_log("Failed to send email to: $to - Error: " . $e->getMessage());
-            error_log("SMTP Config - Host: {$this->smtp_host}, Port: {$this->smtp_port}, User: " . (!empty($this->smtp_user) ? 'Set' : 'Empty'));
+            $error_msg = "PHPMailer Error: " . $error_info;
+            $error_msg .= " | Exception: " . $e->getMessage();
+            $error_msg .= " | SMTP Config - Host: {$this->smtp_host}, Port: {$this->smtp_port}";
+            $error_msg .= " | User: " . (!empty($this->smtp_user) ? substr($this->smtp_user, 0, 10) . '...' : 'Empty');
+            $error_msg .= " | Pass: " . (!empty($this->smtp_pass) ? 'Set (' . strlen($this->smtp_pass) . ' chars)' : 'Empty');
+            
+            error_log($error_msg);
+            error_log("Failed to send email to: $to");
             
             // Check for specific authentication errors
             if (strpos($error_info, '535') !== false || strpos($error_info, 'BadCredentials') !== false || strpos($error_info, 'Could not authenticate') !== false) {
                 error_log("AUTHENTICATION ERROR: Pastikan menggunakan App Password (bukan password biasa) dan 2-Step Verification sudah aktif");
+            }
+            
+            // Log to file for production debugging
+            $is_production = !empty($_ENV['APP_URL']) && strpos($_ENV['APP_URL'], 'localhost') === false && strpos($_ENV['APP_URL'], '127.0.0.1') === false;
+            if ($is_production) {
+                $log_file = __DIR__ . '/../../logs/email_errors.log';
+                $log_dir = dirname($log_file);
+                if (!is_dir($log_dir)) {
+                    @mkdir($log_dir, 0755, true);
+                }
+                @file_put_contents($log_file, date('Y-m-d H:i:s') . " - " . $error_msg . "\n", FILE_APPEND);
             }
             
             return false;

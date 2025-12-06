@@ -43,7 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $error_log_file = ini_get('error_log');
                     $recent_errors = '';
                     if ($error_log_file && file_exists($error_log_file)) {
-                        $recent_errors = file_get_contents($error_log_file);
+                        // Get last 2000 characters of error log
+                        $file_size = filesize($error_log_file);
+                        $read_size = min(2000, $file_size);
+                        $recent_errors = $read_size > 0 ? file_get_contents($error_log_file, false, null, max(0, $file_size - $read_size)) : '';
+                    }
+                    
+                    // Also check custom email error log
+                    $email_log_file = __DIR__ . '/../logs/email_errors.log';
+                    if (file_exists($email_log_file)) {
+                        $email_errors = file_get_contents($email_log_file);
+                        $recent_errors .= $email_errors;
                     }
                     
                     $error_msg = 'Gagal mengirim email. ';
@@ -51,13 +61,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Check if SMTP is configured
                     if (empty($_ENV['SMTP_USER']) || empty($_ENV['SMTP_PASS'])) {
                         $error_msg .= 'Konfigurasi SMTP belum lengkap. Pastikan SMTP_USER dan SMTP_PASS sudah diisi di .env';
+                        error_log("SMTP Configuration Missing - SMTP_USER: " . (!empty($_ENV['SMTP_USER']) ? 'Set' : 'Empty') . ", SMTP_PASS: " . (!empty($_ENV['SMTP_PASS']) ? 'Set' : 'Empty'));
                     } elseif (strpos($recent_errors, '535') !== false || strpos($recent_errors, 'BadCredentials') !== false || strpos($recent_errors, 'Could not authenticate') !== false) {
                         $error_msg .= '<strong>Error Autentikasi Gmail:</strong><br>';
                         $error_msg .= '• Pastikan menggunakan <strong>App Password</strong> (bukan password Gmail biasa)<br>';
                         $error_msg .= '• Pastikan 2-Step Verification sudah aktif di Gmail<br>';
                         $error_msg .= '• Cara membuat App Password: <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color: #3b82f6;">Klik di sini</a>';
                     } else {
-                        $error_msg .= 'Pastikan konfigurasi SMTP di .env sudah benar. Cek error log untuk detail lebih lanjut.';
+                        $error_msg .= 'Pastikan konfigurasi SMTP di .env sudah benar. ';
+                        $is_production = !empty($_ENV['APP_URL']) && strpos($_ENV['APP_URL'], 'localhost') === false && strpos($_ENV['APP_URL'], '127.0.0.1') === false;
+                        if ($is_production) {
+                            $error_msg .= 'Cek file <code>logs/email_errors.log</code> untuk detail error.';
+                        } else {
+                            $error_msg .= 'Cek error log untuk detail lebih lanjut.';
+                        }
                     }
                     
                     $error = $error_msg;
