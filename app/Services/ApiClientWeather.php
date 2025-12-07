@@ -146,6 +146,69 @@ class ApiClientWeather {
             return $cached;
         }
 
+        // First, get coordinates for the location to use with One Call API
+        $weather_data = $this->fetchCurrentWeather($location);
+        if ($weather_data && isset($weather_data['coord'])) {
+            $lat = $weather_data['coord']['lat'];
+            $lon = $weather_data['coord']['lon'];
+            
+            // Try One Call API 3.0 first (for 7+ days forecast)
+            if ($days >= 7) {
+                $one_call_url = "https://api.openweathermap.org/data/3.0/onecall?lat=" . $lat . "&lon=" . $lon . "&appid=" . $this->api_key . "&units=metric&lang=id&exclude=minutely,hourly,alerts";
+                
+                $ch = curl_init();
+                curl_setopt($ch, CURLOPT_URL, $one_call_url);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+                curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+                
+                $response = curl_exec($ch);
+                $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                $curl_error = curl_error($ch);
+                curl_close($ch);
+
+                if ($http_code === 200 && !$curl_error) {
+                    $data = json_decode($response, true);
+                    if ($data && isset($data['daily']) && is_array($data['daily'])) {
+                        // Convert One Call format to forecast format
+                        $forecast_list = [];
+                        foreach (array_slice($data['daily'], 0, $days) as $daily) {
+                            $forecast_list[] = [
+                                'dt' => $daily['dt'],
+                                'main' => [
+                                    'temp' => $daily['temp']['day'],
+                                    'temp_min' => $daily['temp']['min'],
+                                    'temp_max' => $daily['temp']['max'],
+                                    'feels_like' => $daily['feels_like']['day'],
+                                    'pressure' => $daily['pressure'],
+                                    'humidity' => $daily['humidity']
+                                ],
+                                'weather' => $daily['weather'],
+                                'wind' => [
+                                    'speed' => $daily['wind_speed'] ?? 0,
+                                    'deg' => $daily['wind_deg'] ?? 0
+                                ],
+                                'pop' => $daily['pop'] ?? 0
+                            ];
+                        }
+                        $result = [
+                            'list' => $forecast_list,
+                            'city' => [
+                                'name' => $location,
+                                'coord' => ['lat' => $lat, 'lon' => $lon]
+                            ]
+                        ];
+                        $this->saveCache($cache_key, $result);
+                        return $result;
+                    }
+                }
+            }
+        }
+
+        // Fallback to standard forecast API (max 5 days)
         // OpenWeatherMap forecast API returns 3-hour intervals, so for 7 days we need max 40 items
         $cnt = min($days * 8, 40);
         $url = "https://api.openweathermap.org/data/2.5/forecast?q=" . urlencode($location) . "&appid=" . $this->api_key . "&units=metric&lang=id&cnt=" . $cnt;
