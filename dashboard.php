@@ -1135,7 +1135,31 @@ include 'includes/header.php';
                                             <i class="bi bi-droplet"></i>
                                             <span><?php echo $weather_data['main']['humidity']; ?>%</span>
                                         </div>
+                                        <?php if (isset($weather_data['clouds']['all'])): ?>
+                                        <div class="weather-detail-item">
+                                            <i class="bi bi-cloud"></i>
+                                            <span><?php echo $weather_data['clouds']['all']; ?>%</span>
+                                        </div>
+                                        <?php endif; ?>
                                     </div>
+                                    <?php if (isset($weather_data['main']['temp_min']) && isset($weather_data['main']['temp_max'])): ?>
+                                    <div class="mt-3 pt-3" style="border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                                        <div class="d-flex justify-content-center gap-3" style="flex-wrap: wrap;">
+                                            <div class="text-center">
+                                                <small style="opacity: 0.8; font-size: 0.75rem; display: block; margin-bottom: 0.25rem;">Min</small>
+                                                <strong style="font-size: 1.1rem; opacity: 0.95;"><?php echo round($weather_data['main']['temp_min']); ?>°</strong>
+                                            </div>
+                                            <div class="text-center">
+                                                <small style="opacity: 0.8; font-size: 0.75rem; display: block; margin-bottom: 0.25rem;">Terasa</small>
+                                                <strong style="font-size: 1.1rem; opacity: 0.95;"><?php echo round($weather_data['main']['feels_like']); ?>°</strong>
+                                            </div>
+                                            <div class="text-center">
+                                                <small style="opacity: 0.8; font-size: 0.75rem; display: block; margin-bottom: 0.25rem;">Max</small>
+                                                <strong style="font-size: 1.1rem; opacity: 0.95;"><?php echo round($weather_data['main']['temp_max']); ?>°</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -1174,6 +1198,23 @@ include 'includes/header.php';
                                             <div>
                                                 <p class="info-label">Awan</p>
                                                 <p class="info-value"><?php echo $weather_data['clouds']['all'] ?? 0; ?>%</p>
+                                                <?php if (isset($weather_data['clouds']['all'])): 
+                                                    $cloud_percent = $weather_data['clouds']['all'];
+                                                ?>
+                                                <small class="text-muted" style="font-size: 0.7rem; display: block; margin-top: 0.25rem;">
+                                                    <?php 
+                                                    if ($cloud_percent < 25) {
+                                                        echo 'Cerah';
+                                                    } elseif ($cloud_percent < 50) {
+                                                        echo 'Berawan Ringan';
+                                                    } elseif ($cloud_percent < 75) {
+                                                        echo 'Berawan';
+                                                    } else {
+                                                        echo 'Mendung';
+                                                    }
+                                                    ?>
+                                                </small>
+                                                <?php endif; ?>
                                             </div>
                                         </div>
                                     </div>
@@ -1187,52 +1228,74 @@ include 'includes/header.php';
                     <!-- Three Cards Horizontal Layout -->
                     <div class="three-cards-horizontal" style="margin-left: 0 !important; padding-left: 0 !important; width: 100% !important;">
                         <!-- Sun Card -->
-                        <?php if (isset($weather_data['sys'])): ?>
                         <div class="card-modern weather-sun-card">
                             <div class="weather-header">
                                 <h4><i class="bi bi-sun"></i> Matahari</h4>
                             </div>
                             <div class="weather-body">
-                                <?php 
-                                    $sunrise = date('H:i', $weather_data['sys']['sunrise']);
-                                    $sunset = date('H:i', $weather_data['sys']['sunset']);
-                                ?>
-                                <div class="sun-card-content">
-                                    <div class="sun-item">
-                                        <i class="bi bi-sunrise"></i>
-                                        <div>
-                                            <p class="sun-label">Terbit</p>
-                                            <p class="sun-time"><?php echo $sunrise; ?></p>
+                                <?php if (isset($weather_data['sys'])): ?>
+                                    <?php 
+                                        $sunrise = date('H:i', $weather_data['sys']['sunrise']);
+                                        $sunset = date('H:i', $weather_data['sys']['sunset']);
+                                    ?>
+                                    <div class="sun-card-content">
+                                        <div class="sun-item">
+                                            <i class="bi bi-sunrise"></i>
+                                            <div>
+                                                <p class="sun-label">Terbit</p>
+                                                <p class="sun-time"><?php echo $sunrise; ?></p>
+                                            </div>
+                                        </div>
+                                        <div class="sun-item">
+                                            <i class="bi bi-sunset"></i>
+                                            <div>
+                                                <p class="sun-label">Terbenam</p>
+                                                <p class="sun-time"><?php echo $sunset; ?></p>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="sun-item">
-                                        <i class="bi bi-sunset"></i>
-                                        <div>
-                                            <p class="sun-label">Terbenam</p>
-                                            <p class="sun-time"><?php echo $sunset; ?></p>
+                                <?php else: ?>
+                                    <div class="sun-card-content">
+                                        <div class="sun-item">
+                                            <i class="bi bi-sunrise"></i>
+                                            <div>
+                                                <p class="sun-label">Terbit</p>
+                                                <p class="sun-time">--:--</p>
+                                            </div>
+                                        </div>
+                                        <div class="sun-item">
+                                            <i class="bi bi-sunset"></i>
+                                            <div>
+                                                <p class="sun-label">Terbenam</p>
+                                                <p class="sun-time">--:--</p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                <?php endif; ?>
                             </div>
                         </div>
-                        <?php endif; ?>
 
                         <!-- Recommendations -->
-                        <?php if (!empty($recommendations)): ?>
                         <div class="card-modern recommendations-card">
                             <div class="card-header-modern">
                                 <h3>Rekomendasi Aktivitas</h3>
                             </div>
                             <div class="card-body-modern">
-                                <?php foreach ($recommendations as $rec): ?>
-                                <div class="recommendation-item">
-                                    <h6><?php echo htmlspecialchars($rec['activity']); ?></h6>
-                                    <p class="text-muted small"><?php echo htmlspecialchars($rec['reason']); ?></p>
-                                </div>
-                                <?php endforeach; ?>
+                                <?php if (!empty($recommendations)): ?>
+                                    <?php foreach ($recommendations as $rec): ?>
+                                    <div class="recommendation-item">
+                                        <h6><?php echo htmlspecialchars($rec['activity']); ?></h6>
+                                        <p class="text-muted small"><?php echo htmlspecialchars($rec['reason']); ?></p>
+                                    </div>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <div class="recommendation-item">
+                                        <h6>Menunggu data cuaca...</h6>
+                                        <p class="text-muted small">Rekomendasi akan muncul setelah data cuaca tersedia</p>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
-                        <?php endif; ?>
 
                         <!-- Charts -->
                         <div class="card-modern chart-card">

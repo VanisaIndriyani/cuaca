@@ -700,7 +700,72 @@ include '../includes/header.php';
                                 <div class="label">Tekanan</div>
                                 <div class="value"><?php echo $weather_data['main']['pressure']; ?> hPa</div>
                             </div>
+                            <?php if (isset($weather_data['clouds']['all'])): ?>
+                            <div class="weather-detail-item-mobile">
+                                <i class="bi bi-cloud"></i>
+                                <div class="label">Awan</div>
+                                <div class="value"><?php echo $weather_data['clouds']['all']; ?>%</div>
+                            </div>
+                            <?php endif; ?>
                         </div>
+                        
+                        <!-- Awan & Suhu Detail - Mobile -->
+                        <?php if (isset($weather_data['clouds']['all']) || isset($weather_data['main'])): ?>
+                        <div class="mt-4 pt-4" style="border-top: 2px solid rgba(59, 130, 246, 0.1);">
+                            <h5 class="mb-3" style="color: var(--text-color); font-weight: 600;">
+                                <i class="bi bi-cloud-sun" style="color: var(--primary-color);"></i> Detail Awan & Suhu
+                            </h5>
+                            
+                            <?php if (isset($weather_data['clouds']['all'])): ?>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span style="color: var(--text-muted); font-size: 0.9rem;">Tutupan Awan</span>
+                                    <strong style="color: var(--primary-color);"><?php echo $weather_data['clouds']['all']; ?>%</strong>
+                                </div>
+                                <div class="progress" style="height: 12px; border-radius: 6px; background: rgba(59, 130, 246, 0.1);">
+                                    <div class="progress-bar" role="progressbar" style="width: <?php echo $weather_data['clouds']['all']; ?>%; background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); border-radius: 6px;" aria-valuenow="<?php echo $weather_data['clouds']['all']; ?>" aria-valuemin="0" aria-valuemax="100"></div>
+                                </div>
+                                <small class="text-muted">
+                                    <?php 
+                                    $cloud_percent = $weather_data['clouds']['all'];
+                                    if ($cloud_percent < 25) {
+                                        echo 'Cerah';
+                                    } elseif ($cloud_percent < 50) {
+                                        echo 'Berawan Ringan';
+                                    } elseif ($cloud_percent < 75) {
+                                        echo 'Berawan';
+                                    } else {
+                                        echo 'Mendung';
+                                    }
+                                    ?>
+                                </small>
+                            </div>
+                            <?php endif; ?>
+                            
+                            <?php if (isset($weather_data['main']['temp_min']) && isset($weather_data['main']['temp_max'])): ?>
+                            <div class="row g-2">
+                                <div class="col-4">
+                                    <div class="text-center p-2" style="background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                                        <small class="text-muted d-block">Min</small>
+                                        <strong style="color: #60a5fa; font-size: 1.1rem;"><?php echo round($weather_data['main']['temp_min']); ?>°</strong>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-center p-2" style="background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                                        <small class="text-muted d-block">Saat Ini</small>
+                                        <strong style="color: #3b82f6; font-size: 1.1rem;"><?php echo round($weather_data['main']['temp']); ?>°</strong>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="text-center p-2" style="background: rgba(251, 191, 36, 0.1); border-radius: 8px;">
+                                        <small class="text-muted d-block">Max</small>
+                                        <strong style="color: #f59e0b; font-size: 1.1rem;"><?php echo round($weather_data['main']['temp_max']); ?>°</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -767,6 +832,104 @@ include '../includes/header.php';
                                         </div>
                                     </div>
                                     <?php endif; ?>
+                                    <?php if (isset($weather_data['clouds']['all'])): ?>
+                                    <div class="col-md-6 mb-3">
+                                        <div class="d-flex align-items-center">
+                                            <i class="bi bi-cloud fs-4 me-3"></i>
+                                            <div>
+                                                <small class="text-muted">Awan</small>
+                                                <p class="mb-0"><strong><?php echo $weather_data['clouds']['all']; ?>%</strong></p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Awan & Suhu Detail Card - Desktop -->
+                <div class="card card-modern mb-4 d-none d-md-block">
+                    <div class="card-header-modern">
+                        <h3><i class="bi bi-cloud-sun"></i> Informasi Awan & Suhu</h3>
+                    </div>
+                    <div class="card-body-modern">
+                        <div class="row g-4">
+                            <!-- Cloud Cover Card -->
+                            <div class="col-md-6">
+                                <div class="card" style="border-radius: 16px; border: 2px solid rgba(59, 130, 246, 0.2); background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(96, 165, 250, 0.08) 100%); transition: all 0.3s ease;">
+                                    <div class="card-body text-center" style="padding: 2rem;">
+                                        <i class="bi bi-cloud fs-1 mb-3" style="color: #3b82f6;"></i>
+                                        <h4 class="mb-2">Tutupan Awan</h4>
+                                        <?php if (isset($weather_data['clouds']['all'])): ?>
+                                        <div class="mb-3">
+                                            <div class="progress" style="height: 20px; border-radius: 10px; background: rgba(59, 130, 246, 0.1);">
+                                                <div class="progress-bar" role="progressbar" style="width: <?php echo $weather_data['clouds']['all']; ?>%; background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%); border-radius: 10px;" aria-valuenow="<?php echo $weather_data['clouds']['all']; ?>" aria-valuemin="0" aria-valuemax="100">
+                                                    <?php echo $weather_data['clouds']['all']; ?>%
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <p class="mb-0">
+                                            <?php 
+                                            $cloud_percent = $weather_data['clouds']['all'];
+                                            if ($cloud_percent < 25) {
+                                                echo '<span class="badge bg-success">Cerah</span>';
+                                            } elseif ($cloud_percent < 50) {
+                                                echo '<span class="badge bg-info">Berawan Ringan</span>';
+                                            } elseif ($cloud_percent < 75) {
+                                                echo '<span class="badge bg-warning">Berawan</span>';
+                                            } else {
+                                                echo '<span class="badge bg-secondary">Mendung</span>';
+                                            }
+                                            ?>
+                                        </p>
+                                        <?php else: ?>
+                                        <p class="text-muted">Data tidak tersedia</p>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Temperature Detail Card -->
+                            <div class="col-md-6">
+                                <div class="card" style="border-radius: 16px; border: 2px solid rgba(251, 191, 36, 0.2); background: linear-gradient(135deg, rgba(251, 191, 36, 0.08) 0%, rgba(245, 158, 11, 0.08) 100%); transition: all 0.3s ease;">
+                                    <div class="card-body text-center" style="padding: 2rem;">
+                                        <i class="bi bi-thermometer-half fs-1 mb-3" style="color: #fbbf24;"></i>
+                                        <h4 class="mb-3">Detail Suhu</h4>
+                                        <?php if (isset($weather_data['main'])): ?>
+                                        <div class="row g-3 text-start">
+                                            <div class="col-12">
+                                                <div class="d-flex justify-content-between align-items-center p-2" style="background: rgba(255,255,255,0.5); border-radius: 8px;">
+                                                    <span class="text-muted">Suhu Saat Ini</span>
+                                                    <strong style="color: #3b82f6; font-size: 1.25rem;"><?php echo round($weather_data['main']['temp']); ?>°C</strong>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <div class="d-flex justify-content-between align-items-center p-2" style="background: rgba(255,255,255,0.5); border-radius: 8px;">
+                                                    <span class="text-muted">Terasa Seperti</span>
+                                                    <strong style="color: #f59e0b; font-size: 1.25rem;"><?php echo round($weather_data['main']['feels_like']); ?>°C</strong>
+                                                </div>
+                                            </div>
+                                            <?php if (isset($weather_data['main']['temp_min']) && isset($weather_data['main']['temp_max'])): ?>
+                                            <div class="col-6">
+                                                <div class="text-center p-2" style="background: rgba(255,255,255,0.5); border-radius: 8px;">
+                                                    <small class="text-muted d-block">Min</small>
+                                                    <strong style="color: #60a5fa;"><?php echo round($weather_data['main']['temp_min']); ?>°</strong>
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <div class="text-center p-2" style="background: rgba(255,255,255,0.5); border-radius: 8px;">
+                                                    <small class="text-muted d-block">Max</small>
+                                                    <strong style="color: #ef4444;"><?php echo round($weather_data['main']['temp_max']); ?>°</strong>
+                                                </div>
+                                            </div>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php else: ?>
+                                        <p class="text-muted">Data tidak tersedia</p>
+                                        <?php endif; ?>
+                                    </div>
                                 </div>
                             </div>
                         </div>

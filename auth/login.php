@@ -286,6 +286,9 @@ if (isLoggedIn()) {
             align-items: center;
             justify-content: center;
             gap: 0.5rem;
+            font-stretch: normal;
+            letter-spacing: normal;
+            font-variant: normal;
         }
 
         .btn-google:hover {
@@ -298,7 +301,13 @@ if (isLoggedIn()) {
 
         .btn-google i {
             font-size: 1.2rem;
-            color: #4285f4;
+            color: #ea4335;
+        }
+
+        .btn-google span {
+            font-stretch: normal;
+            letter-spacing: normal;
+            font-variant: normal;
         }
 
         /* Alert */
