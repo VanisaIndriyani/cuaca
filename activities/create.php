@@ -341,7 +341,13 @@ include '../includes/header.php';
                         </div>
                         <div class="mb-3">
                             <label for="location" class="form-label">Lokasi</label>
-                            <input type="text" class="form-control" id="location" name="location" placeholder="Contoh: Kampus, Taman, dll">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="location" name="location" placeholder="Contoh: Kampus, Taman, dll">
+                                <button type="button" class="btn btn-outline-primary" id="getLocationBtn" onclick="getCurrentLocation()">
+                                    <i class="bi bi-geo-alt-fill"></i> Dapatkan Lokasi
+                                </button>
+                            </div>
+                            <small class="text-muted" id="locationStatus">Klik tombol untuk mendapatkan lokasi Anda secara otomatis</small>
                         </div>
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary">
@@ -383,6 +389,167 @@ include '../includes/header.php';
         </a>
     </div>
 </div>
+
+<script>
+let locationRetrieved = false;
+
+// Fungsi untuk mendapatkan lokasi saat ini (hanya dipanggil saat user klik tombol)
+function getCurrentLocation() {
+    const locationInput = document.getElementById('location');
+    const locationStatus = document.getElementById('locationStatus');
+    const getLocationBtn = document.getElementById('getLocationBtn');
+    
+    // Cek apakah browser mendukung geolocation
+    if (!navigator.geolocation) {
+        locationStatus.textContent = 'Browser Anda tidak mendukung geolocation';
+        locationStatus.className = 'text-danger';
+        return;
+    }
+    
+    // Update UI
+    locationInput.value = '';
+    locationInput.placeholder = 'Mendeteksi lokasi...';
+    locationStatus.textContent = 'Mendapatkan lokasi...';
+    locationStatus.className = 'text-info';
+    getLocationBtn.disabled = true;
+    getLocationBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses...';
+    
+    // Request lokasi (hanya dipanggil dari user gesture/click)
+    navigator.geolocation.getCurrentPosition(
+        function(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            // Gunakan fungsi reverseGeocode yang sudah ada
+            reverseGeocode(latitude, longitude).then(() => {
+                getLocationBtn.disabled = false;
+                getLocationBtn.innerHTML = '<i class="bi bi-geo-alt-fill"></i> Dapatkan Lokasi';
+            });
+        },
+        function(error) {
+            // Handle error
+            let errorMessage = 'Gagal mendapatkan lokasi. ';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage += 'Akses lokasi ditolak. Silakan izinkan akses lokasi di pengaturan browser.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage += 'Informasi lokasi tidak tersedia.';
+                    break;
+                case error.TIMEOUT:
+                    errorMessage += 'Waktu permintaan lokasi habis.';
+                    break;
+                default:
+                    errorMessage += 'Terjadi kesalahan yang tidak diketahui.';
+                    break;
+            }
+            
+            locationStatus.textContent = errorMessage;
+            locationStatus.className = 'text-danger';
+            locationInput.placeholder = 'Contoh: Kampus, Taman, dll';
+            getLocationBtn.disabled = false;
+            getLocationBtn.innerHTML = '<i class="bi bi-geo-alt-fill"></i> Coba Lagi';
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+}
+
+// Cek apakah ada parameter lat/lon di URL (dari redirect atau link lain)
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const lat = urlParams.get('lat');
+    const lon = urlParams.get('lon');
+    
+    if (lat && lon) {
+        // Jika ada koordinat di URL, gunakan untuk reverse geocoding
+        reverseGeocode(parseFloat(lat), parseFloat(lon));
+    }
+});
+
+// Fungsi untuk reverse geocoding dari koordinat
+async function reverseGeocode(latitude, longitude) {
+    const locationInput = document.getElementById('location');
+    const locationStatus = document.getElementById('locationStatus');
+    const getLocationBtn = document.getElementById('getLocationBtn');
+    
+    locationInput.value = '';
+    locationInput.placeholder = 'Mengonversi koordinat...';
+    locationStatus.textContent = 'Mengonversi koordinat ke alamat...';
+    locationStatus.className = 'text-info';
+    if (getLocationBtn) {
+        getLocationBtn.disabled = true;
+    }
+    
+    try {
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+            {
+                headers: {
+                    'User-Agent': 'CuacaApp/1.0'
+                }
+            }
+        );
+        
+        if (!response.ok) {
+            throw new Error('Gagal mendapatkan alamat');
+        }
+        
+        const data = await response.json();
+        
+        // Format alamat dari hasil reverse geocoding
+        let address = '';
+        if (data.address) {
+            const addr = data.address;
+            if (addr.road) {
+                address = addr.road;
+                if (addr.house_number) address = addr.house_number + ' ' + address;
+            } else if (addr.neighbourhood || addr.suburb) {
+                address = addr.neighbourhood || addr.suburb;
+            } else if (addr.village || addr.town || addr.city) {
+                address = addr.village || addr.town || addr.city;
+            }
+            
+            const parts = [];
+            if (addr.village && !address.includes(addr.village)) parts.push(addr.village);
+            if (addr.subdistrict) parts.push(addr.subdistrict);
+            if (addr.city && !address.includes(addr.city)) parts.push(addr.city);
+            if (addr.state) parts.push(addr.state);
+            
+            if (parts.length > 0) {
+                address += (address ? ', ' : '') + parts.join(', ');
+            }
+            
+            if (!address && data.display_name) {
+                address = data.display_name.split(',').slice(0, 3).join(',').trim();
+            }
+        }
+        
+        if (!address) {
+            address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        }
+        
+        locationInput.value = address;
+        locationStatus.textContent = 'Lokasi berhasil dideteksi! Anda dapat mengedit jika perlu.';
+        locationStatus.className = 'text-success';
+        
+        return Promise.resolve();
+        
+    } catch (error) {
+        console.error('Error reverse geocoding:', error);
+        locationInput.value = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+        locationStatus.textContent = 'Lokasi dideteksi (koordinat). Anda dapat mengedit untuk menambahkan nama tempat.';
+        locationStatus.className = 'text-warning';
+        return Promise.resolve();
+    } finally {
+        if (getLocationBtn) {
+            getLocationBtn.disabled = false;
+        }
+    }
+}
+</script>
 
 <?php include '../includes/footer.php'; ?>
 

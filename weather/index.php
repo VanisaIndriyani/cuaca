@@ -13,17 +13,36 @@ $lon = $_GET['lon'] ?? null;
 $apiClient = new ApiClientWeather();
 $weatherModel = new WeatherData($db);
 
+// Prioritize location from user activities (most accurate)
+require_once __DIR__ . '/../app/Models/Activity.php';
+$activityModel = new Activity($db);
+$user_id = $_SESSION['user_id'];
+$activity_location = $activityModel->getMostUsedLocation($user_id);
+
 // Fetch weather data
 if ($lat && $lon) {
     $weather_data = $apiClient->fetchWeatherByCoords($lat, $lon);
     if ($weather_data) {
-        // Get detailed location name (desa/kecamatan)
-        $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
-        $location = $detailed_location ?: ($weather_data['name'] ?? $location);
+        // Prioritize activity location if it's a named location (not coordinate)
+        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+            // Use activity location (user's manual input is more accurate)
+            $location = $activity_location;
+        } else {
+            // Get detailed location name (desa/kecamatan) from reverse geocoding
+            $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
+            $location = $detailed_location ?: ($weather_data['name'] ?? $location);
+        }
     }
 } else {
+    // If no coordinates, prioritize activity location
+    if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+        $location = $activity_location;
+    }
     $weather_data = $apiClient->fetchCurrentWeather($location);
 }
+
+// Save to session
+$_SESSION['user_location'] = $location;
 
 $forecast_data = $apiClient->fetchForecast($location, 5);
 

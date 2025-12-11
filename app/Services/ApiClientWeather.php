@@ -293,12 +293,32 @@ class ApiClientWeather {
                 $addr = $data['address'];
                 
                 // Extract detailed location info
+                // Prioritize village/desa for Indonesia
+                $village = '';
+                if (!empty($addr['village'])) {
+                    $village = $addr['village'];
+                } elseif (!empty($addr['suburb'])) {
+                    $village = $addr['suburb'];
+                } elseif (!empty($addr['neighbourhood'])) {
+                    $village = $addr['neighbourhood'];
+                } elseif (!empty($addr['hamlet'])) {
+                    $village = $addr['hamlet'];
+                }
+                
+                // Get subdistrict (kecamatan) - important for Indonesia
+                $subdistrict = '';
+                if (!empty($addr['subdistrict'])) {
+                    $subdistrict = $addr['subdistrict'];
+                } elseif (!empty($addr['county'])) {
+                    $subdistrict = $addr['county'];
+                }
+                
                 $result = [
                     'name' => $data['display_name'] ?? '',
                     'display_name' => $data['display_name'] ?? '',
-                    'village' => $addr['village'] ?? $addr['suburb'] ?? $addr['neighbourhood'] ?? '',
+                    'village' => $village,
                     'district' => $addr['city_district'] ?? $addr['district'] ?? '',
-                    'subdistrict' => $addr['subdistrict'] ?? '',
+                    'subdistrict' => $subdistrict,
                     'city' => $addr['city'] ?? $addr['town'] ?? $addr['municipality'] ?? '',
                     'state' => $addr['state'] ?? $addr['province'] ?? '',
                     'country' => $addr['country'] ?? 'Indonesia',
@@ -361,31 +381,29 @@ class ApiClientWeather {
             if ($location_details) {
                 $parts = [];
                 
-                // Priority: University/College/School name
-                if (!empty($location_details['university'])) {
-                    $parts[] = $location_details['university'];
-                }
-                
-                // Village/Suburb/Neighbourhood
+                // Priority 1: Village/Suburb/Neighbourhood (most specific)
                 if (!empty($location_details['village'])) {
                     $parts[] = $location_details['village'];
                 }
                 
-                // District/Subdistrict
+                // Priority 2: Subdistrict (Kecamatan) - important for Indonesia
                 if (!empty($location_details['subdistrict'])) {
                     $parts[] = $location_details['subdistrict'];
-                } elseif (!empty($location_details['district'])) {
+                }
+                
+                // Priority 3: District (if no subdistrict)
+                if (empty($location_details['subdistrict']) && !empty($location_details['district'])) {
                     $parts[] = $location_details['district'];
                 }
                 
-                // City
-                if (!empty($location_details['city'])) {
-                    $parts[] = $location_details['city'];
+                // Priority 4: University/College/School name (if available)
+                if (!empty($location_details['university'])) {
+                    $parts[] = $location_details['university'];
                 }
                 
-                // State/Province
-                if (!empty($location_details['state'])) {
-                    $parts[] = $location_details['state'];
+                // Priority 5: City (only if village/subdistrict not available)
+                if (empty($location_details['village']) && empty($location_details['subdistrict']) && !empty($location_details['city'])) {
+                    $parts[] = $location_details['city'];
                 }
                 
                 // Build formatted location name
@@ -393,8 +411,8 @@ class ApiClientWeather {
                     // Remove duplicates and filter out empty
                     $parts = array_unique(array_filter($parts));
                     
-                    // Format: "Universitas Mercu Buana, Desa X, Yogyakarta"
-                    // Or: "Desa X, Kecamatan Y, Yogyakarta"
+                    // Format: "Desa Cibalongsari, Kecamatan X" or "Puseurjaya, Kecamatan Y"
+                    // Prioritize village/subdistrict over city
                     $formatted = implode(', ', $parts);
                     
                     // If formatted name is different from default, use it
@@ -408,7 +426,28 @@ class ApiClientWeather {
                     // Extract first few parts of display_name (usually most relevant)
                     $display_parts = explode(',', $location_details['display_name']);
                     if (count($display_parts) >= 2) {
-                        // Take first 2-3 parts (e.g., "Universitas Mercu Buana, Depok, Jawa Barat")
+                        // Prioritize village/subdistrict parts
+                        $relevant_parts = [];
+                        foreach ($display_parts as $part) {
+                            $part = trim($part);
+                            // Skip if it's a country or province (too general)
+                            if (stripos($part, 'Indonesia') === false && 
+                                stripos($part, 'Jawa') === false && 
+                                stripos($part, 'Sumatera') === false &&
+                                stripos($part, 'Kalimantan') === false &&
+                                stripos($part, 'Sulawesi') === false &&
+                                stripos($part, 'Papua') === false &&
+                                stripos($part, 'Bali') === false &&
+                                stripos($part, 'Nusa Tenggara') === false) {
+                                $relevant_parts[] = $part;
+                                // Take first 2-3 relevant parts
+                                if (count($relevant_parts) >= 3) break;
+                            }
+                        }
+                        if (!empty($relevant_parts)) {
+                            return implode(', ', $relevant_parts);
+                        }
+                        // If no relevant parts found, use first 2-3 parts
                         return implode(', ', array_slice($display_parts, 0, min(3, count($display_parts))));
                     }
                     return $location_details['display_name'];

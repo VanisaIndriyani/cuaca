@@ -12,6 +12,7 @@ $error = '';
 $success = '';
 $user = null;
 $is_edit = false;
+$is_main_admin = false; // Flag untuk menandai akun admin utama
 
 // Get user if editing
 if (isset($_GET['id'])) {
@@ -19,6 +20,9 @@ if (isset($_GET['id'])) {
     $user = $userModel->getById($_GET['id']);
     if (!$user) {
         $error = 'User tidak ditemukan';
+    } else {
+        // Cek apakah ini adalah admin utama (admin@cuaca.app)
+        $is_main_admin = ($user['email'] === 'admin@cuaca.app');
     }
 }
 
@@ -32,57 +36,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($name) || empty($email)) {
         $error = 'Nama dan email harus diisi';
     } else {
-        $userModel->name = $name;
-        $userModel->email = $email;
-        $userModel->role = $role;
-        
+        // Cek apakah ini adalah admin utama yang sedang diedit
+        $editing_main_admin = false;
         if ($is_edit && isset($_POST['id'])) {
-            $userModel->id = $_POST['id'];
-            
-            // Update password only if provided
-            if (!empty($password)) {
-                $userModel->password = password_hash($password, PASSWORD_DEFAULT);
-                $query = "UPDATE users SET name = :name, email = :email, password = :password, role = :role, updated_at = NOW() WHERE id = :id";
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(':name', $userModel->name);
-                $stmt->bindParam(':email', $userModel->email);
-                $stmt->bindParam(':password', $userModel->password);
-                $stmt->bindParam(':role', $userModel->role);
-                $stmt->bindParam(':id', $userModel->id);
-                
-                if ($stmt->execute()) {
-                    $success = 'User berhasil diupdate';
-                    $user = $userModel->getById($_POST['id']);
-                } else {
-                    $error = 'Gagal mengupdate user';
-                }
-            } else {
-                // Update without password
-                $query = "UPDATE users SET name = :name, email = :email, role = :role, updated_at = NOW() WHERE id = :id";
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(':name', $userModel->name);
-                $stmt->bindParam(':email', $userModel->email);
-                $stmt->bindParam(':role', $userModel->role);
-                $stmt->bindParam(':id', $userModel->id);
-                
-                if ($stmt->execute()) {
-                    $success = 'User berhasil diupdate';
-                    $user = $userModel->getById($_POST['id']);
-                } else {
-                    $error = 'Gagal mengupdate user';
-                }
+            $editing_user = $userModel->getById($_POST['id']);
+            if ($editing_user && $editing_user['email'] === 'admin@cuaca.app') {
+                $editing_main_admin = true;
+                // Paksa role tetap admin untuk admin utama
+                $role = 'admin';
+                // Paksa email tetap admin@cuaca.app untuk admin utama
+                $email = 'admin@cuaca.app';
             }
-        } else {
-            // Create new user
-            if (empty($password)) {
-                $error = 'Password harus diisi untuk user baru';
-            } else {
-                $userModel->password = password_hash($password, PASSWORD_DEFAULT);
-                if ($userModel->register()) {
-                    $success = 'User berhasil ditambahkan';
-                    header('refresh:1;url=' . base_url('admin/users.php'));
+        }
+        
+        // Validasi: Admin utama tidak boleh diubah rolenya atau emailnya
+        if ($editing_main_admin) {
+            if ($role !== 'admin') {
+                $error = 'Role akun admin utama (admin@cuaca.app) tidak dapat diubah';
+            } elseif ($email !== 'admin@cuaca.app') {
+                $error = 'Email akun admin utama tidak dapat diubah';
+            }
+        }
+        
+        if (empty($error)) {
+            $userModel->name = $name;
+            $userModel->email = $email;
+            $userModel->role = $role;
+            
+            if ($is_edit && isset($_POST['id'])) {
+                $userModel->id = $_POST['id'];
+                
+                // Update password only if provided
+                if (!empty($password)) {
+                    $userModel->password = password_hash($password, PASSWORD_DEFAULT);
+                    $query = "UPDATE users SET name = :name, email = :email, password = :password, role = :role, updated_at = NOW() WHERE id = :id";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindParam(':name', $userModel->name);
+                    $stmt->bindParam(':email', $userModel->email);
+                    $stmt->bindParam(':password', $userModel->password);
+                    $stmt->bindParam(':role', $userModel->role);
+                    $stmt->bindParam(':id', $userModel->id);
+                    
+                    if ($stmt->execute()) {
+                        $success = 'User berhasil diupdate';
+                        $user = $userModel->getById($_POST['id']);
+                        $is_main_admin = ($user['email'] === 'admin@cuaca.app');
+                    } else {
+                        $error = 'Gagal mengupdate user';
+                    }
                 } else {
-                    $error = 'Gagal menambahkan user. Email mungkin sudah digunakan.';
+                    // Update without password
+                    $query = "UPDATE users SET name = :name, email = :email, role = :role, updated_at = NOW() WHERE id = :id";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindParam(':name', $userModel->name);
+                    $stmt->bindParam(':email', $userModel->email);
+                    $stmt->bindParam(':role', $userModel->role);
+                    $stmt->bindParam(':id', $userModel->id);
+                    
+                    if ($stmt->execute()) {
+                        $success = 'User berhasil diupdate';
+                        $user = $userModel->getById($_POST['id']);
+                        $is_main_admin = ($user['email'] === 'admin@cuaca.app');
+                    } else {
+                        $error = 'Gagal mengupdate user';
+                    }
+                }
+            } else {
+                // Create new user
+                if (empty($password)) {
+                    $error = 'Password harus diisi untuk user baru';
+                } else {
+                    $userModel->password = password_hash($password, PASSWORD_DEFAULT);
+                    if ($userModel->register()) {
+                        $success = 'User berhasil ditambahkan';
+                        header('refresh:1;url=' . base_url('admin/users.php'));
+                    } else {
+                        $error = 'Gagal menambahkan user. Email mungkin sudah digunakan.';
+                    }
                 }
             }
         }
@@ -138,7 +168,13 @@ include '../includes/header.php';
                         </label>
                         <input type="email" class="form-control" id="email" name="email"
                                value="<?php echo $user ? htmlspecialchars($user['email']) : ''; ?>"
-                               required placeholder="Masukkan email user">
+                               required placeholder="Masukkan email user"
+                               <?php echo $is_main_admin ? 'readonly' : ''; ?>>
+                        <?php if ($is_main_admin): ?>
+                            <small class="form-text text-warning">
+                                <i class="bi bi-info-circle"></i> Email admin utama tidak dapat diubah
+                            </small>
+                        <?php endif; ?>
                     </div>
 
                     <div class="mb-3">
@@ -157,10 +193,16 @@ include '../includes/header.php';
                         <label for="role" class="form-label">
                             <i class="bi bi-shield-check"></i> Role
                         </label>
-                        <select class="form-select" id="role" name="role" required>
+                        <select class="form-select" id="role" name="role" required <?php echo $is_main_admin ? 'disabled' : ''; ?>>
                             <option value="user" <?php echo ($user && $user['role'] == 'user') ? 'selected' : ''; ?>>Guest</option>
                             <option value="admin" <?php echo ($user && $user['role'] == 'admin') ? 'selected' : ''; ?>>Admin</option>
                         </select>
+                        <?php if ($is_main_admin): ?>
+                            <input type="hidden" name="role" value="admin">
+                            <small class="form-text text-warning">
+                                <i class="bi bi-shield-lock"></i> Role akun admin utama tidak dapat diubah
+                            </small>
+                        <?php endif; ?>
                     </div>
 
                     <div class="d-flex gap-2">

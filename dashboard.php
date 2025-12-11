@@ -22,15 +22,33 @@ $analytics = new AnalyticsService($db);
 $activityModel = new Activity($db);
 $weatherModel = new WeatherData($db);
 
+// Prioritize location from user activities (most accurate)
+$activity_location = $activityModel->getMostUsedLocation($user_id);
+$use_activity_location = false;
+
 // Fetch current weather
 if ($lat && $lon) {
     $weather_data = $apiClient->fetchWeatherByCoords($lat, $lon);
     if ($weather_data) {
         // Get detailed location name (desa/kecamatan)
         $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
-        $location = $detailed_location ?: ($weather_data['name'] ?? $location);
+        
+        // If user has activity location and it's not a coordinate, prioritize it
+        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+            // Use activity location if it's a named location (not coordinate)
+            $location = $activity_location;
+            $use_activity_location = true;
+        } else {
+            // Use reverse geocoded location
+            $location = $detailed_location ?: ($weather_data['name'] ?? $location);
+        }
     }
 } else {
+    // If no coordinates, prioritize activity location
+    if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+        $location = $activity_location;
+        $use_activity_location = true;
+    }
     $weather_data = $apiClient->fetchCurrentWeather($location);
 }
 $forecast_data = $apiClient->fetchForecast($location, 7);

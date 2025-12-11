@@ -10,11 +10,149 @@ $page_title = 'Analitik';
 $page_icon = 'graph-up';
 $is_admin = isAdmin();
 $user_id = $_SESSION['user_id'];
-$location = $_SESSION['user_location'] ?? 'Jakarta';
 
 $analytics = new AnalyticsService($db);
 $activityModel = new Activity($db);
 $weatherModel = new WeatherData($db);
+
+// Handle location from URL parameters (from geolocation)
+$lat = $_GET['lat'] ?? null;
+$lon = $_GET['lon'] ?? null;
+$location_param = $_GET['location'] ?? null;
+
+// Initialize API client for reverse geocoding
+require_once __DIR__ . '/app/Services/ApiClientWeather.php';
+$apiClient = new ApiClientWeather();
+
+// Prioritize location from user activities (most accurate - user input)
+$activity_location = $activityModel->getMostUsedLocation($user_id);
+
+// If coordinates are provided in URL, get location name from reverse geocoding
+if ($lat && $lon) {
+    try {
+        // Validate coordinates
+        $lat = floatval($lat);
+        $lon = floatval($lon);
+        
+        if ($lat >= -90 && $lat <= 90 && $lon >= -180 && $lon <= 180) {
+            $weather_data = $apiClient->fetchWeatherByCoords($lat, $lon);
+            if ($weather_data && isset($weather_data['name'])) {
+                // Prioritize activity location if it's a named location (not coordinate)
+                if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+                    // Use activity location (user's manual input is more accurate)
+                    $location = $activity_location;
+                } else {
+                    // Get detailed location name (desa/kecamatan) from reverse geocoding
+                    try {
+                        $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
+                        $location = $detailed_location ?: ($weather_data['name'] ?? 'Jakarta');
+                    } catch (Exception $e) {
+                        // If formatLocationName fails, use weather data name
+                        error_log("Error formatting location name: " . $e->getMessage());
+                        $location = $weather_data['name'] ?? 'Jakarta';
+                    }
+                }
+                // Save to session for future use
+                $_SESSION['user_location'] = $location;
+            } else {
+                // If API fails, prioritize activity location
+                if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+                    $location = $activity_location;
+                } else {
+                    $location = $_SESSION['user_location'] ?? 'Jakarta';
+                }
+            }
+        } else {
+            // Invalid coordinates, prioritize activity location
+            if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+                $location = $activity_location;
+            } else {
+                error_log("Invalid coordinates: lat=$lat, lon=$lon");
+                $location = $_SESSION['user_location'] ?? 'Jakarta';
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Error getting location from coordinates: " . $e->getMessage());
+        // Prioritize activity location on error
+        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+            $location = $activity_location;
+        } else {
+            $location = $_SESSION['user_location'] ?? 'Jakarta';
+        }
+    } catch (Error $e) {
+        error_log("Fatal error getting location from coordinates: " . $e->getMessage());
+        // Prioritize activity location on fatal error
+        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+            $location = $activity_location;
+        } else {
+            $location = $_SESSION['user_location'] ?? 'Jakarta';
+        }
+    }
+} elseif ($location_param) {
+    // Location parameter provided in URL
+    $location = $location_param;
+    $_SESSION['user_location'] = $location;
+} else {
+    // Ambil lokasi dari aktivitas user (yang paling sering digunakan)
+    $activity_location = $activityModel->getMostUsedLocation($user_id);
+    
+    // Tentukan lokasi yang akan digunakan untuk analitik
+    $location = $_SESSION['user_location'] ?? 'Jakarta'; // Default
+    
+    if ($activity_location) {
+        // Jika lokasi adalah koordinat (format: lat, lon), cari lokasi terdekat dari database
+        if (preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+            // Ini adalah koordinat, cari lokasi yang paling banyak datanya di weather_data
+            $query = "SELECT location FROM weather_data 
+                      WHERE location IS NOT NULL 
+                      AND location != '' 
+                      GROUP BY location 
+                      ORDER BY COUNT(*) DESC 
+                      LIMIT 1";
+            $stmt = $db->prepare($query);
+            $stmt->execute();
+            $nearest_location = $stmt->fetch();
+            
+            if ($nearest_location && $nearest_location['location']) {
+                $location = $nearest_location['location'];
+            }
+        } else {
+            // Lokasi adalah nama tempat, cek apakah ada di database weather_data
+            $query = "SELECT location FROM weather_data 
+                      WHERE location = :location 
+                      LIMIT 1";
+            $stmt = $db->prepare($query);
+            $stmt->bindParam(':location', $activity_location);
+            $stmt->execute();
+            $exists = $stmt->fetch();
+            
+            if ($exists) {
+                // Lokasi ada di database, gunakan lokasi dari aktivitas
+                $location = $activity_location;
+            } else {
+                // Lokasi tidak ada di database, cari lokasi yang paling banyak datanya
+                $query = "SELECT location FROM weather_data 
+                          WHERE location IS NOT NULL 
+                          AND location != '' 
+                          GROUP BY location 
+                          ORDER BY COUNT(*) DESC 
+                          LIMIT 1";
+                $stmt = $db->prepare($query);
+                $stmt->execute();
+                $most_used_location = $stmt->fetch();
+                
+                if ($most_used_location && $most_used_location['location']) {
+                    $location = $most_used_location['location'];
+                }
+            }
+        }
+    }
+    
+    // Save to session if not already set
+    if (!isset($_SESSION['user_location']) || $_SESSION['user_location'] === 'Jakarta') {
+        $_SESSION['user_location'] = $location;
+    }
+}
 
 // Date range for report
 $start_date = $_GET['start_date'] ?? date('Y-m-d', strtotime('-30 days'));

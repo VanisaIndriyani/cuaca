@@ -195,7 +195,13 @@ include '../includes/header.php';
                         </div>
                         <div class="mb-3">
                             <label for="location" class="form-label">Lokasi</label>
-                            <input type="text" class="form-control" id="location" name="location" value="<?php echo htmlspecialchars($act['location'] ?? ''); ?>">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="location" name="location" value="<?php echo htmlspecialchars($act['location'] ?? ''); ?>">
+                                <button type="button" class="btn btn-outline-primary" id="getLocationBtn" onclick="getCurrentLocation()">
+                                    <i class="bi bi-geo-alt-fill"></i> Update Lokasi
+                                </button>
+                            </div>
+                            <small class="text-muted" id="locationStatus">Klik tombol untuk memperbarui lokasi saat ini</small>
                         </div>
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary">
@@ -237,6 +243,135 @@ include '../includes/header.php';
         </a>
     </div>
 </div>
+
+<script>
+// Fungsi untuk mendapatkan lokasi saat ini
+function getCurrentLocation() {
+    const locationInput = document.getElementById('location');
+    const locationStatus = document.getElementById('locationStatus');
+    const getLocationBtn = document.getElementById('getLocationBtn');
+    
+    // Cek apakah browser mendukung geolocation
+    if (!navigator.geolocation) {
+        locationStatus.textContent = 'Browser Anda tidak mendukung geolocation';
+        locationStatus.className = 'text-danger';
+        return;
+    }
+    
+    // Update UI
+    locationStatus.textContent = 'Mendapatkan lokasi...';
+    locationStatus.className = 'text-info';
+    getLocationBtn.disabled = true;
+    getLocationBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Memproses...';
+    
+    // Request lokasi
+    navigator.geolocation.getCurrentPosition(
+        async function(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            
+            try {
+                // Reverse geocoding menggunakan Nominatim (OpenStreetMap) - gratis, tidak perlu API key
+                locationStatus.textContent = 'Mengonversi koordinat ke alamat...';
+                
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+                    {
+                        headers: {
+                            'User-Agent': 'CuacaApp/1.0'
+                        }
+                    }
+                );
+                
+                if (!response.ok) {
+                    throw new Error('Gagal mendapatkan alamat');
+                }
+                
+                const data = await response.json();
+                
+                // Format alamat dari hasil reverse geocoding
+                let address = '';
+                if (data.address) {
+                    const addr = data.address;
+                    // Prioritaskan nama jalan, kemudian kelurahan/kecamatan, kota
+                    if (addr.road) {
+                        address = addr.road;
+                        if (addr.house_number) address = addr.house_number + ' ' + address;
+                    } else if (addr.neighbourhood || addr.suburb) {
+                        address = addr.neighbourhood || addr.suburb;
+                    } else if (addr.village || addr.town || addr.city) {
+                        address = addr.village || addr.town || addr.city;
+                    }
+                    
+                    // Tambahkan informasi tambahan
+                    const parts = [];
+                    if (addr.village && !address.includes(addr.village)) parts.push(addr.village);
+                    if (addr.subdistrict) parts.push(addr.subdistrict);
+                    if (addr.city && !address.includes(addr.city)) parts.push(addr.city);
+                    if (addr.state) parts.push(addr.state);
+                    
+                    if (parts.length > 0) {
+                        address += (address ? ', ' : '') + parts.join(', ');
+                    }
+                    
+                    // Jika tidak ada alamat yang detail, gunakan display_name
+                    if (!address && data.display_name) {
+                        address = data.display_name.split(',').slice(0, 3).join(',').trim();
+                    }
+                }
+                
+                // Jika masih kosong, gunakan koordinat
+                if (!address) {
+                    address = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+                }
+                
+                // Isi field lokasi
+                locationInput.value = address;
+                locationStatus.textContent = 'Lokasi berhasil diperbarui!';
+                locationStatus.className = 'text-success';
+                
+            } catch (error) {
+                console.error('Error reverse geocoding:', error);
+                // Jika reverse geocoding gagal, gunakan koordinat
+                locationInput.value = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+                locationStatus.textContent = 'Lokasi diperbarui (koordinat). Anda dapat mengedit untuk menambahkan nama tempat.';
+                locationStatus.className = 'text-warning';
+            } finally {
+                getLocationBtn.disabled = false;
+                getLocationBtn.innerHTML = '<i class="bi bi-geo-alt-fill"></i> Update Lokasi';
+            }
+        },
+        function(error) {
+            // Handle error
+            let errorMessage = 'Gagal mendapatkan lokasi. ';
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    errorMessage += 'Akses lokasi ditolak. Silakan izinkan akses lokasi di pengaturan browser.';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    errorMessage += 'Informasi lokasi tidak tersedia.';
+                    break;
+                case error.TIMEOUT:
+                    errorMessage += 'Waktu permintaan lokasi habis.';
+                    break;
+                default:
+                    errorMessage += 'Terjadi kesalahan yang tidak diketahui.';
+                    break;
+            }
+            
+            locationStatus.textContent = errorMessage;
+            locationStatus.className = 'text-danger';
+            getLocationBtn.disabled = false;
+            getLocationBtn.innerHTML = '<i class="bi bi-geo-alt-fill"></i> Coba Lagi';
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+}
+</script>
 
 <?php include '../includes/footer.php'; ?>
 

@@ -152,5 +152,23 @@ class Activity {
         $stmt->execute();
         return $stmt->fetchAll();
     }
+
+    public function getMostUsedLocation($user_id) {
+        $query = "SELECT location, COUNT(*) as count 
+                  FROM " . $this->table . " 
+                  WHERE user_id = :user_id 
+                  AND location IS NOT NULL 
+                  AND location != '' 
+                  GROUP BY location 
+                  ORDER BY count DESC, location ASC 
+                  LIMIT 1";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':user_id', $user_id);
+        $stmt->execute();
+        $result = $stmt->fetch();
+        
+        return $result ? $result['location'] : null;
+    }
 }
 
