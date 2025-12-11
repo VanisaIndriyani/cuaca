@@ -23,22 +23,49 @@ $activity_location = $activityModel->getMostUsedLocation($user_id);
 if ($lat && $lon) {
     $weather_data = $apiClient->fetchWeatherByCoords($lat, $lon);
     if ($weather_data) {
-        // Prioritize activity location if it's a named location (not coordinate)
-        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+        // Get detailed location name (desa/kecamatan) from reverse geocoding first
+        $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
+        
+        // Prioritize activity location if it's a named location (not coordinate) and not generic
+        $generic_locations = ['taman', 'kampus', 'rumah', 'kantor', 'sekolah', 'mall', 'pasar'];
+        $activity_trimmed = $activity_location ? strtolower(trim($activity_location)) : '';
+        $is_generic = $activity_location && in_array($activity_trimmed, $generic_locations) && str_word_count($activity_location) <= 1;
+        
+        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location) && !$is_generic) {
             // Use activity location (user's manual input is more accurate)
             $location = $activity_location;
         } else {
-            // Get detailed location name (desa/kecamatan) from reverse geocoding
-            $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
+            // Use reverse geocoded location (more specific)
+            // Fallback to weather_data name if detailed_location is empty
             $location = $detailed_location ?: ($weather_data['name'] ?? $location);
         }
     }
 } else {
-    // If no coordinates, prioritize activity location
-    if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+    // If no coordinates, prioritize activity location (but skip generic ones)
+    $generic_locations = ['taman', 'kampus', 'rumah', 'kantor', 'sekolah', 'mall', 'pasar'];
+    $activity_trimmed = $activity_location ? strtolower(trim($activity_location)) : '';
+    $is_generic = $activity_location && in_array($activity_trimmed, $generic_locations) && str_word_count($activity_location) <= 1;
+    
+    if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location) && !$is_generic) {
         $location = $activity_location;
     }
     $weather_data = $apiClient->fetchCurrentWeather($location);
+    
+    // If weather_data has name and location is too generic, use weather_data name
+    if ($weather_data && isset($weather_data['name']) && $weather_data['name'] && 
+        ($location === 'Jakarta' || strlen($location) < 5)) {
+        $location = $weather_data['name'];
+    }
+}
+
+// Ensure location is not empty
+if (empty($location) || trim($location) === '') {
+    // Fallback to weather_data name or default
+    if ($weather_data && isset($weather_data['name']) && !empty($weather_data['name'])) {
+        $location = $weather_data['name'];
+    } else {
+        $location = 'Jakarta'; // Ultimate fallback
+    }
 }
 
 // Save to session

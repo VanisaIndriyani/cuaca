@@ -401,14 +401,14 @@ class ApiClientWeather {
                     $parts[] = $location_details['district'];
                 }
                 
-                // Priority 4: University/College/School name (if available)
-                if (!empty($location_details['university'])) {
-                    $parts[] = $location_details['university'];
+                // Priority 4: City - always include city for complete location name
+                if (!empty($location_details['city'])) {
+                    $parts[] = $location_details['city'];
                 }
                 
-                // Priority 5: City (only if village/subdistrict not available)
-                if (empty($location_details['village']) && empty($location_details['subdistrict']) && !empty($location_details['city'])) {
-                    $parts[] = $location_details['city'];
+                // Priority 5: University/College/School name (if available)
+                if (!empty($location_details['university'])) {
+                    $parts[] = $location_details['university'];
                 }
                 
                 // Build formatted location name
@@ -416,12 +416,24 @@ class ApiClientWeather {
                     // Remove duplicates and filter out empty
                     $parts = array_unique(array_filter($parts));
                     
-                    // Format: "Desa Cibalongsari, Kecamatan X" or "Puseurjaya, Kecamatan Y"
-                    // Prioritize village/subdistrict over city
+                    // Format: "Desa Cibalongsari, Kecamatan Klari, Karawang" (village, subdistrict, city)
                     $formatted = implode(', ', $parts);
                     
-                    // If formatted name is different from default, use it
+                    // If formatted name is different from default and has content, use it
                     if ($formatted !== $location_name && strlen($formatted) > 0) {
+                        // Ensure we have at least 2 parts (village + city or subdistrict + city)
+                        // If only 1 part, add city from weather_data if available
+                        if (count($parts) === 1 && !empty($location_name) && $location_name !== 'Unknown') {
+                            // Check if location_name contains city name that's not in parts
+                            $location_name_parts = explode(',', $location_name);
+                            foreach ($location_name_parts as $name_part) {
+                                $name_part = trim($name_part);
+                                if (!in_array($name_part, $parts) && strlen($name_part) > 3) {
+                                    $formatted .= ', ' . $name_part;
+                                    break; // Add only one additional part
+                                }
+                            }
+                        }
                         return $formatted;
                     }
                 }
@@ -445,7 +457,7 @@ class ApiClientWeather {
                                 stripos($part, 'Bali') === false &&
                                 stripos($part, 'Nusa Tenggara') === false) {
                                 $relevant_parts[] = $part;
-                                // Take first 2-3 relevant parts
+                                // Take first 2-3 relevant parts (village, subdistrict, city)
                                 if (count($relevant_parts) >= 3) break;
                             }
                         }
@@ -460,6 +472,7 @@ class ApiClientWeather {
             }
         }
         
+        // Final fallback: return weather_data name (usually includes city)
         return $location_name;
     }
 
