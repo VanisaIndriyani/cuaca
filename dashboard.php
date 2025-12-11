@@ -34,18 +34,29 @@ if ($lat && $lon) {
         $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
         
         // If user has activity location and it's not a coordinate, prioritize it
-        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
-            // Use activity location if it's a named location (not coordinate)
+        // But skip if it's too generic (single word like "Taman", "Kampus", etc.)
+        $generic_locations = ['taman', 'kampus', 'rumah', 'kantor', 'sekolah', 'mall', 'pasar'];
+        $activity_trimmed = strtolower(trim($activity_location));
+        // Check if it's exactly a generic location (single word, no additional info)
+        $is_generic = in_array($activity_trimmed, $generic_locations) && str_word_count($activity_location) <= 1;
+        
+        if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location) && !$is_generic) {
+            // Use activity location if it's a named location (not coordinate) and not too generic
             $location = $activity_location;
             $use_activity_location = true;
         } else {
-            // Use reverse geocoded location
+            // Use reverse geocoded location (more specific)
             $location = $detailed_location ?: ($weather_data['name'] ?? $location);
         }
     }
 } else {
-    // If no coordinates, prioritize activity location
-    if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location)) {
+    // If no coordinates, prioritize activity location (but skip generic ones)
+    $generic_locations = ['taman', 'kampus', 'rumah', 'kantor', 'sekolah', 'mall', 'pasar'];
+    $activity_trimmed = $activity_location ? strtolower(trim($activity_location)) : '';
+    // Check if it's exactly a generic location (single word, no additional info)
+    $is_generic = $activity_location && in_array($activity_trimmed, $generic_locations) && str_word_count($activity_location) <= 1;
+    
+    if ($activity_location && !preg_match('/^-?\d+\.?\d*,\s*-?\d+\.?\d*$/', $activity_location) && !$is_generic) {
         $location = $activity_location;
         $use_activity_location = true;
     }
@@ -931,7 +942,17 @@ include 'includes/header.php';
                                 }
                                 $day_name = $days[date('w', $forecast['dt'])];
                                 $day_short = substr($day_name, 0, 3);
-                                $temp = round($forecast['main']['temp']);
+                                // Use temp_max if available, otherwise use temp (for daily forecast, prefer max temp)
+                                $temp = round($forecast['main']['temp_max'] ?? $forecast['main']['temp'] ?? 0);
+                                // Ensure temperature is reasonable (not too cold for Indonesia)
+                                if ($temp < 15) {
+                                    // If temp seems too low, check if it's actually temp_min
+                                    if (isset($forecast['main']['temp_max']) && $forecast['main']['temp_max'] > $temp) {
+                                        $temp = round($forecast['main']['temp_max']);
+                                    } elseif (isset($forecast['main']['temp']) && $forecast['main']['temp'] > $temp) {
+                                        $temp = round($forecast['main']['temp']);
+                                    }
+                                }
                                 $icon = $forecast['weather'][0]['icon'] ?? '01d';
                                 $is_today = date('Y-m-d', $forecast['dt']) === date('Y-m-d');
                             ?>
