@@ -26,9 +26,12 @@ $weatherModel = new WeatherData($db);
 $activity_location = $activityModel->getMostUsedLocation($user_id);
 $use_activity_location = false;
 
+// Check if user wants to force refresh (from URL parameter)
+$force_refresh = isset($_GET['refresh']) && $_GET['refresh'] === '1';
+
 // Fetch current weather
 if ($lat && $lon) {
-    $weather_data = $apiClient->fetchWeatherByCoords($lat, $lon);
+    $weather_data = $apiClient->fetchWeatherByCoords($lat, $lon, $force_refresh);
     if ($weather_data) {
         // Get detailed location name (desa/kecamatan)
         $detailed_location = $apiClient->formatLocationName($weather_data, $lat, $lon);
@@ -60,7 +63,7 @@ if ($lat && $lon) {
         $location = $activity_location;
         $use_activity_location = true;
     }
-    $weather_data = $apiClient->fetchCurrentWeather($location);
+    $weather_data = $apiClient->fetchCurrentWeather($location, $force_refresh);
 }
 $forecast_data = $apiClient->fetchForecast($location, 7);
 $_SESSION['user_location'] = $location;
@@ -910,7 +913,7 @@ include 'includes/header.php';
                 </div>
                 <div class="header-right">
                     <div class="header-actions">
-                        <button class="icon-btn" onclick="location.reload()" title="Refresh">
+                        <button class="icon-btn" onclick="refreshWeather()" title="Refresh">
                             <i class="bi bi-arrow-clockwise"></i>
                         </button>
                         <form method="GET" class="search-form">
@@ -1382,6 +1385,19 @@ include 'includes/header.php';
 </div>
 
 <script>
+// Function to refresh weather data
+function refreshWeather() {
+    const url = new URL(window.location.href);
+    url.searchParams.set('refresh', '1');
+    // Preserve lat/lon if exists
+    if (url.searchParams.has('lat') && url.searchParams.has('lon')) {
+        // Keep coordinates
+    } else if (url.searchParams.has('location')) {
+        // Keep location
+    }
+    window.location.href = url.toString();
+}
+
 // Temperature Chart
 document.addEventListener('DOMContentLoaded', function() {
     const tempCtx = document.getElementById('temperatureChart');

@@ -10,7 +10,7 @@ class ApiClientWeather {
         $this->loadEnv();
         $this->api_key = $_ENV['OWM_API_KEY'] ?? '';
         $this->cache_dir = __DIR__ . '/../../public/cache/';
-        $this->cache_ttl = 600; // 10 minutes
+        $this->cache_ttl = 300; // 5 minutes (reduced for better accuracy)
         
         // Create cache directory if not exists
         if (!file_exists($this->cache_dir)) {
@@ -57,11 +57,13 @@ class ApiClientWeather {
         file_put_contents($cache_file, json_encode($data));
     }
 
-    public function fetchCurrentWeather($location) {
-        // Check cache first
-        $cached = $this->getCachedData($location);
-        if ($cached !== null) {
-            return $cached;
+    public function fetchCurrentWeather($location, $force_refresh = false) {
+        // Check cache first (unless force refresh)
+        if (!$force_refresh) {
+            $cached = $this->getCachedData($location);
+            if ($cached !== null) {
+                return $cached;
+            }
         }
 
         // Fetch from API
@@ -96,11 +98,14 @@ class ApiClientWeather {
         return null;
     }
 
-    public function fetchWeatherByCoords($lat, $lon) {
+    public function fetchWeatherByCoords($lat, $lon, $force_refresh = false) {
         $cache_key = "coords_{$lat}_{$lon}";
-        $cached = $this->getCachedData($cache_key);
-        if ($cached !== null) {
-            return $cached;
+        // Check cache first (unless force refresh)
+        if (!$force_refresh) {
+            $cached = $this->getCachedData($cache_key);
+            if ($cached !== null) {
+                return $cached;
+            }
         }
 
         $url = "https://api.openweathermap.org/data/2.5/weather?lat=" . $lat . "&lon=" . $lon . "&appid=" . $this->api_key . "&units=metric&lang=id";
