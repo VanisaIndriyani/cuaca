@@ -311,11 +311,24 @@ class ApiClientWeather {
                 }
                 
                 // Get subdistrict (kecamatan) - important for Indonesia
+                // Kecamatan bisa ada di beberapa field di Nominatim
                 $subdistrict = '';
                 if (!empty($addr['subdistrict'])) {
                     $subdistrict = $addr['subdistrict'];
                 } elseif (!empty($addr['county'])) {
                     $subdistrict = $addr['county'];
+                } elseif (!empty($addr['city_district'])) {
+                    $subdistrict = $addr['city_district'];
+                }
+                
+                // Get city/kabupaten
+                $city = '';
+                if (!empty($addr['city'])) {
+                    $city = $addr['city'];
+                } elseif (!empty($addr['town'])) {
+                    $city = $addr['town'];
+                } elseif (!empty($addr['municipality'])) {
+                    $city = $addr['municipality'];
                 }
                 
                 $result = [
@@ -386,54 +399,118 @@ class ApiClientWeather {
             if ($location_details) {
                 $parts = [];
                 
-                // Priority 1: Village/Suburb/Neighbourhood (most specific)
+                // Format: Desa, Kecamatan, Kota (bukan Desa, Kota, Kecamatan)
+                // Urutan HARUS: Desa -> Kecamatan -> Kota
+                
+                // Priority 1: Village/Suburb/Neighbourhood (most specific) - Desa
                 if (!empty($location_details['village'])) {
                     $parts[] = $location_details['village'];
                 }
                 
-                // Priority 2: Subdistrict (Kecamatan) - important for Indonesia
+                // Priority 2: Subdistrict (Kecamatan) - HARUS setelah desa, SEBELUM kota
                 if (!empty($location_details['subdistrict'])) {
                     $parts[] = $location_details['subdistrict'];
-                }
-                
-                // Priority 3: District (if no subdistrict)
-                if (empty($location_details['subdistrict']) && !empty($location_details['district'])) {
+                } elseif (!empty($location_details['district'])) {
+                    // Jika tidak ada subdistrict, gunakan district sebagai kecamatan
                     $parts[] = $location_details['district'];
                 }
                 
-                // Priority 4: City - always include city for complete location name
+                // Priority 3: City/Kabupaten - HARUS setelah kecamatan (di akhir)
                 if (!empty($location_details['city'])) {
                     $parts[] = $location_details['city'];
+                } elseif (!empty($location_details['state'])) {
+                    // Jika city tidak ada, gunakan state (untuk Yogyakarta, state = "Yogyakarta")
+                    // Tapi hanya jika state bukan provinsi besar (Jawa Tengah, Jawa Barat, dll)
+                    $state = $location_details['state'];
+                    $large_provinces = ['Jawa Tengah', 'Jawa Barat', 'Jawa Timur', 'Sumatera Utara', 'Sumatera Selatan', 
+                                       'Kalimantan Timur', 'Kalimantan Selatan', 'Sulawesi Selatan', 'Sulawesi Utara'];
+                    if (!in_array($state, $large_provinces)) {
+                        $parts[] = $state; // Untuk Yogyakarta, state = "Yogyakarta" atau "Daerah Istimewa Yogyakarta"
+                    }
                 }
                 
-                // Priority 5: University/College/School name (if available)
+                // Priority 5: University/College/School name (if available) - tambahkan di akhir jika ada
                 if (!empty($location_details['university'])) {
-                    $parts[] = $location_details['university'];
+                    // Jika sudah ada desa/kecamatan, tambahkan di akhir
+                    // Jika tidak ada, bisa di awal
+                    if (count($parts) > 0) {
+                        $parts[] = $location_details['university'];
+                    } else {
+                        array_unshift($parts, $location_details['university']);
+                    }
                 }
                 
                 // Build formatted location name
                 if (!empty($parts)) {
-                    // Remove duplicates and filter out empty
-                    $parts = array_unique(array_filter($parts));
+                    // Remove duplicates while preserving order, and filter out empty
+                    $seen = [];
+                    $unique_parts = [];
+                    foreach ($parts as $part) {
+                        $part = trim($part);
+                        if (!empty($part) && !in_array($part, $seen)) {
+                            $seen[] = $part;
+                            $unique_parts[] = $part;
+                        }
+                    }
+                    $parts = $unique_parts;
                     
-                    // Format: "Desa Cibalongsari, Kecamatan Klari, Karawang" (village, subdistrict, city)
+                    // Format: "Desa, Kecamatan, Kota" (village, subdistrict, city)
+                    // Pastikan urutan: Desa -> Kecamatan -> Kota
                     $formatted = implode(', ', $parts);
                     
                     // If formatted name is different from default and has content, use it
                     if ($formatted !== $location_name && strlen($formatted) > 0) {
-                        // Ensure we have at least 2 parts (village + city or subdistrict + city)
-                        // If only 1 part, add city from weather_data if available
-                        if (count($parts) === 1 && !empty($location_name) && $location_name !== 'Unknown') {
-                            // Check if location_name contains city name that's not in parts
-                            $location_name_parts = explode(',', $location_name);
-                            foreach ($location_name_parts as $name_part) {
-                                $name_part = trim($name_part);
-                                if (!in_array($name_part, $parts) && strlen($name_part) > 3) {
-                                    $formatted .= ', ' . $name_part;
-                                    break; // Add only one additional part
+                        // Pastikan ada kota di akhir format (Desa, Kecamatan, Kota)
+                        $last_part = end($parts);
+                        $has_city = false;
+                        
+                        // Cek apakah bagian terakhir adalah kota (biasanya mengandung kata kota/kabupaten atau nama kota besar)
+                        $city_keywords = ['Kota', 'Kabupaten', 'Yogyakarta', 'Sleman', 'Bantul', 'Gunungkidul', 'Kulon Progo'];
+                        foreach ($city_keywords as $keyword) {
+                            if (stripos($last_part, $keyword) !== false) {
+                                $has_city = true;
+                                break;
+                            }
+                        }
+                        
+                        // Jika tidak ada kota, tambahkan dari location_name atau state
+                        if (!$has_city) {
+                            // Cari kota dari location_name (weather_data name)
+                            if (!empty($location_name) && $location_name !== 'Unknown') {
+                                $location_name_parts = explode(',', $location_name);
+                                foreach ($location_name_parts as $name_part) {
+                                    $name_part = trim($name_part);
+                                    // Prioritaskan Yogyakarta atau nama kota
+                                    if ((stripos($name_part, 'Yogyakarta') !== false || 
+                                         stripos($name_part, 'Sleman') !== false ||
+                                         stripos($name_part, 'Bantul') !== false) &&
+                                        !in_array($name_part, $parts) && strlen($name_part) > 3) {
+                                        $formatted .= ', ' . $name_part;
+                                        $has_city = true;
+                                        break;
+                                    }
+                                }
+                                // Jika masih belum ada, gunakan bagian terakhir dari location_name
+                                if (!$has_city && count($location_name_parts) > 0) {
+                                    $last_location_part = trim(end($location_name_parts));
+                                    if (!in_array($last_location_part, $parts) && strlen($last_location_part) > 3) {
+                                        $formatted .= ', ' . $last_location_part;
+                                    }
+                                }
+                            }
+                            
+                            // Jika masih belum ada kota, coba dari state
+                            if (!$has_city && !empty($location_details['state'])) {
+                                $state = $location_details['state'];
+                                // Untuk Yogyakarta, gunakan "Yogyakarta" bukan "Daerah Istimewa Yogyakarta"
+                                if (stripos($state, 'Yogyakarta') !== false) {
+                                    $formatted .= ', Yogyakarta';
+                                } elseif (!in_array($state, ['Jawa Tengah', 'Jawa Barat', 'Jawa Timur'])) {
+                                    $formatted .= ', ' . $state;
                                 }
                             }
                         }
+                        
                         return $formatted;
                     }
                 }
