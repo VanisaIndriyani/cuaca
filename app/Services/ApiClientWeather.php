@@ -402,33 +402,61 @@ class ApiClientWeather {
                 // Format: Desa, Kecamatan, Kota (HANYA 3 bagian, tidak lebih)
                 // Urutan HARUS: Desa -> Kecamatan -> Kota
                 
+                // Khusus untuk Yogyakarta: Sleman, Bantul, dll adalah Kabupaten (Kecamatan), bukan Kota
+                $is_yogyakarta = false;
+                if (!empty($location_details['state']) && stripos($location_details['state'], 'Yogyakarta') !== false) {
+                    $is_yogyakarta = true;
+                }
+                
                 // Priority 1: Village/Suburb/Neighbourhood (most specific) - Desa
                 if (!empty($location_details['village'])) {
                     $parts[] = $location_details['village'];
                 }
                 
                 // Priority 2: Subdistrict (Kecamatan) - HARUS setelah desa, SEBELUM kota
-                if (!empty($location_details['subdistrict'])) {
-                    $parts[] = $location_details['subdistrict'];
-                } elseif (!empty($location_details['district'])) {
-                    // Jika tidak ada subdistrict, gunakan district sebagai kecamatan
-                    $parts[] = $location_details['district'];
+                // Untuk Yogyakarta: jika city adalah Sleman/Bantul/Gunungkidul/Kulon Progo, itu adalah kabupaten (kecamatan)
+                if ($is_yogyakarta && !empty($location_details['city'])) {
+                    $yogyakarta_regencies = ['Sleman', 'Bantul', 'Gunungkidul', 'Kulon Progo'];
+                    $city_lower = strtolower($location_details['city']);
+                    $is_regency = false;
+                    foreach ($yogyakarta_regencies as $regency) {
+                        if (stripos($city_lower, strtolower($regency)) !== false) {
+                            // City adalah kabupaten, gunakan sebagai kecamatan
+                            $parts[] = $regency;
+                            $is_regency = true;
+                            break;
+                        }
+                    }
+                    // Jika bukan kabupaten, gunakan subdistrict atau district
+                    if (!$is_regency) {
+                        if (!empty($location_details['subdistrict'])) {
+                            $parts[] = $location_details['subdistrict'];
+                        } elseif (!empty($location_details['district'])) {
+                            $parts[] = $location_details['district'];
+                        }
+                    }
+                } else {
+                    // Bukan Yogyakarta, gunakan logika normal
+                    if (!empty($location_details['subdistrict'])) {
+                        $parts[] = $location_details['subdistrict'];
+                    } elseif (!empty($location_details['district'])) {
+                        $parts[] = $location_details['district'];
+                    }
                 }
                 
                 // Priority 3: City/Kabupaten - HARUS setelah kecamatan (di akhir)
-                // Hanya ambil city, jangan tambahkan state jika sudah ada city
-                if (!empty($location_details['city'])) {
+                // Untuk Yogyakarta: selalu gunakan "Yogyakarta" sebagai kota
+                if ($is_yogyakarta) {
+                    $parts[] = 'Yogyakarta';
+                } elseif (!empty($location_details['city'])) {
                     $parts[] = $location_details['city'];
                 } elseif (!empty($location_details['state'])) {
-                    // Jika city tidak ada, gunakan state (untuk Yogyakarta, state = "Yogyakarta")
+                    // Jika city tidak ada, gunakan state (untuk daerah khusus selain Yogyakarta)
                     // Tapi hanya jika state bukan provinsi besar
                     $state = $location_details['state'];
                     $large_provinces = ['Jawa Tengah', 'Jawa Barat', 'Jawa Timur', 'Sumatera Utara', 'Sumatera Selatan', 
                                        'Kalimantan Timur', 'Kalimantan Selatan', 'Sulawesi Selatan', 'Sulawesi Utara'];
-                    // Untuk Yogyakarta, gunakan "Yogyakarta" bukan "Daerah Istimewa Yogyakarta"
-                    if (stripos($state, 'Yogyakarta') !== false) {
-                        $parts[] = 'Yogyakarta';
-                    } elseif (!in_array($state, $large_provinces)) {
+                    if (!in_array($state, $large_provinces)) {
                         $parts[] = $state;
                     }
                 }
