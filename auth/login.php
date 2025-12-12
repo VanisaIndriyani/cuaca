@@ -23,22 +23,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Email dan password harus diisi';
     } else {
         $user = new User($db);
-        if ($user->login($email, $password)) {
-            $_SESSION['user_id'] = $user->id;
-            $_SESSION['user_name'] = $user->name;
-            $_SESSION['user_email'] = $user->email;
-            $_SESSION['user_role'] = $user->role;
-            if (!empty($user->avatar)) {
-                if (strpos($user->avatar, 'http') === 0) {
-                    $_SESSION['user_avatar'] = $user->avatar;
+        
+        // Check if user exists and get deactivation status
+        $userData = $user->findByEmail($email);
+        if ($userData && password_verify($password, $userData['password'])) {
+            // Check if user is deactivated (with auto-reactivate if period has passed)
+            if ($user->isDeactivated($userData, true)) {
+                $error = $user->getDeactivationMessage($userData);
+            } else if ($user->login($email, $password)) {
+                $_SESSION['user_id'] = $user->id;
+                $_SESSION['user_name'] = $user->name;
+                $_SESSION['user_email'] = $user->email;
+                $_SESSION['user_role'] = $user->role;
+                if (!empty($user->avatar)) {
+                    if (strpos($user->avatar, 'http') === 0) {
+                        $_SESSION['user_avatar'] = $user->avatar;
+                    } else {
+                        $_SESSION['user_avatar'] = base_url('public' . $user->avatar);
+                    }
                 } else {
-                    $_SESSION['user_avatar'] = base_url('public' . $user->avatar);
+                    $_SESSION['user_avatar'] = null;
                 }
+                
+                redirectAfterLogin();
             } else {
-                $_SESSION['user_avatar'] = null;
+                $error = 'Email atau password salah';
             }
-            
-            redirectAfterLogin();
         } else {
             $error = 'Email atau password salah';
         }

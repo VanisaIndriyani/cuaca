@@ -51,6 +51,7 @@ include '../includes/header.php';
                                 <th>Nama</th>
                                 <th>Email</th>
                                 <th>Role</th>
+                                <th>Status</th>
                                 <th>Bergabung</th>
                                 <th>Aksi</th>
                             </tr>
@@ -58,12 +59,13 @@ include '../includes/header.php';
                         <tbody>
                             <?php if (empty($users)): ?>
                             <tr>
-                                <td colspan="6" class="text-center">Tidak ada user</td>
+                                <td colspan="7" class="text-center">Tidak ada user</td>
                             </tr>
                             <?php else: ?>
                                 <?php 
                                 $no = 1;
                                 foreach ($users as $user): 
+                                    $isDeactivated = $userModel->isDeactivated($user);
                                 ?>
                                 <tr>
                                     <td><?php echo $no++; ?></td>
@@ -74,21 +76,44 @@ include '../includes/header.php';
                                             <?php echo htmlspecialchars(ucfirst(displayRole($user['role']))); ?>
                                         </span>
                                     </td>
+                                    <td>
+                                        <?php if ($isDeactivated): ?>
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-person-x"></i> Nonaktif
+                                            </span>
+                                        <?php else: ?>
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-person-check"></i> Aktif
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><?php echo date('d/m/Y', strtotime($user['created_at'])); ?></td>
                                     <td>
-                                        <div class="d-flex gap-2">
+                                        <div class="d-flex gap-2 flex-wrap">
                                             <a href="<?php echo base_url('admin/user-form.php?id=' . $user['id']); ?>" 
                                                class="btn btn-sm btn-warning">
                                                 <i class="bi bi-pencil"></i> Edit
                                             </a>
+                                            <?php if ($user['role'] === 'user' && $user['id'] != $_SESSION['user_id']): ?>
+                                                <?php if ($isDeactivated): ?>
+                                                    <a href="<?php echo base_url('admin/user-reactivate.php?id=' . $user['id']); ?>" 
+                                                       class="btn btn-sm btn-success" 
+                                                       onclick="return confirm('Apakah Anda yakin ingin mengaktifkan kembali akun ini?')">
+                                                        <i class="bi bi-person-check"></i> Aktifkan
+                                                    </a>
+                                                <?php else: ?>
+                                                    <a href="<?php echo base_url('admin/user-deactivate.php?id=' . $user['id']); ?>" 
+                                                       class="btn btn-sm btn-danger">
+                                                        <i class="bi bi-person-x"></i> Nonaktifkan
+                                                    </a>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
                                             <?php if ($user['id'] != $_SESSION['user_id']): ?>
                                             <a href="<?php echo base_url('admin/user-delete.php?id=' . $user['id']); ?>" 
                                                class="btn btn-sm btn-danger" 
                                                onclick="return confirm('Apakah Anda yakin ingin menghapus user ini?')">
                                                 <i class="bi bi-trash"></i> Hapus
                                             </a>
-                                            <?php else: ?>
-                                            <span class="text-muted">User aktif</span>
                                             <?php endif; ?>
                                         </div>
                                     </td>

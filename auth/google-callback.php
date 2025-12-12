@@ -62,6 +62,12 @@ if (isset($_GET['code'])) {
             $existing_user = $user->findByGoogleId($user_info->id);
             
             if ($existing_user) {
+                // Check if user is deactivated (with auto-reactivate if period has passed)
+                if ($user->isDeactivated($existing_user, true)) {
+                    $_SESSION['error'] = $user->getDeactivationMessage($existing_user);
+                    redirect('auth/login.php');
+                }
+                
                 // Login existing user
                 $_SESSION['user_id'] = $existing_user['id'];
                 $_SESSION['user_name'] = $existing_user['name'];
@@ -91,6 +97,13 @@ if (isset($_GET['code'])) {
                     
                     if ($user->createFromGoogle($google_data)) {
                         $updated_user = $user->findByGoogleId($user_info->id);
+                        
+                        // Check if user is deactivated (with auto-reactivate if period has passed)
+                        if ($user->isDeactivated($updated_user, true)) {
+                            $_SESSION['error'] = $user->getDeactivationMessage($updated_user);
+                            redirect('auth/login.php');
+                        }
+                        
                         $_SESSION['user_id'] = $updated_user['id'];
                         $_SESSION['user_name'] = $updated_user['name'];
                         $_SESSION['user_email'] = $updated_user['email'];
@@ -117,6 +130,12 @@ if (isset($_GET['code'])) {
                     if ($user->createFromGoogle($google_data)) {
                         $new_user = $user->findByGoogleId($user_info->id);
                         if ($new_user) {
+                            // Check if user is deactivated (shouldn't happen for new users, but check anyway)
+                            if ($user->isDeactivated($new_user, true)) {
+                                $_SESSION['error'] = $user->getDeactivationMessage($new_user);
+                                redirect('auth/login.php');
+                            }
+                            
                             $_SESSION['user_id'] = $new_user['id'];
                             $_SESSION['user_name'] = $new_user['name'];
                             $_SESSION['user_email'] = $new_user['email'];

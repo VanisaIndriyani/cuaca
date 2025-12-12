@@ -41,7 +41,7 @@ class User {
     }
 
     public function login($email, $password) {
-        $query = "SELECT id, name, email, password, role, avatar, google_id 
+        $query = "SELECT id, name, email, password, role, avatar, google_id, deactivated_at, deactivated_until 
                   FROM " . $this->table . " 
                   WHERE email = :email LIMIT 1";
         
@@ -52,6 +52,11 @@ class User {
         $user = $stmt->fetch();
         
         if ($user && password_verify($password, $user['password'])) {
+            // Check if user is deactivated (with auto-reactivate if period has passed)
+            if ($this->isDeactivated($user, true)) {
+                return false; // User is deactivated
+            }
+            
             $this->id = $user['id'];
             $this->name = $user['name'];
             $this->email = $user['email'];
@@ -135,7 +140,7 @@ class User {
     }
 
     public function getAll() {
-        $query = "SELECT id, name, email, role, created_at FROM " . $this->table . " ORDER BY created_at DESC";
+        $query = "SELECT id, name, email, role, created_at, deactivated_at, deactivated_until FROM " . $this->table . " ORDER BY created_at DESC";
         $stmt = $this->conn->prepare($query);
         $stmt->execute();
         return $stmt->fetchAll();
@@ -241,6 +246,151 @@ class User {
         }
         
         return false;
+    }
+    
+    /**
+     * Check if user is currently deactivated
+     * @param array|null $user User data array or null to use current user
+     * @param bool $autoReactivate Whether to auto-reactivate if period has passed (default: false)
+     */
+    public function isDeactivated($user = null, $autoReactivate = false) {
+        if ($user === null) {
+            // If no user data provided, get current user
+            if (!$this->id) {
+                return false;
+            }
+            $user = $this->getById($this->id);
+        }
+        
+        if (!$user) {
+            return false;
+        }
+        
+        // Check if user has deactivated_at set
+        if (!empty($user['deactivated_at'])) {
+            // If deactivated_until is NULL, it's permanent deactivation
+            if (empty($user['deactivated_until'])) {
+                return true;
+            }
+            
+            // Check if deactivation period has passed
+            $now = new DateTime();
+            $until = new DateTime($user['deactivated_until']);
+            
+            if ($now < $until) {
+                return true; // Still deactivated
+            } else {
+                // Deactivation period has passed
+                if ($autoReactivate) {
+                    // Auto-reactivate only if explicitly requested (e.g., during login)
+                    $this->reactivate($user['id']);
+                }
+                return false; // No longer deactivated
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Get deactivation message for user
+     */
+    public function getDeactivationMessage($user = null) {
+        if ($user === null) {
+            if (!$this->id) {
+                return '';
+            }
+            $user = $this->getById($this->id);
+        }
+        
+        if (!$user || !$this->isDeactivated($user)) {
+            return '';
+        }
+        
+        if (empty($user['deactivated_until'])) {
+            return 'Akun Anda telah dinonaktifkan selamanya karena melanggar aturan yang ada.';
+        }
+        
+        // Calculate the original duration based on deactivated_at and deactivated_until
+        $deactivated_at = new DateTime($user['deactivated_at']);
+        $deactivated_until = new DateTime($user['deactivated_until']);
+        $diff = $deactivated_at->diff($deactivated_until);
+        
+        $days = $diff->days;
+        
+        // Determine the duration message based on the original deactivation period
+        if ($days == 1) {
+            return 'Akun Anda telah dinonaktifkan 1 hari karena melanggar aturan yang ada.';
+        } else if ($days == 3) {
+            return 'Akun Anda telah dinonaktifkan 3 hari karena melanggar aturan yang ada.';
+        } else if ($days == 7) {
+            return 'Akun Anda telah dinonaktifkan 7 hari karena melanggar aturan yang ada.';
+        } else if ($days == 30) {
+            return 'Akun Anda telah dinonaktifkan 30 hari karena melanggar aturan yang ada.';
+        } else {
+            // For other durations, show the actual days
+            return "Akun Anda telah dinonaktifkan selama {$days} hari karena melanggar aturan yang ada.";
+        }
+    }
+    
+    /**
+     * Deactivate user account
+     * @param int $user_id User ID to deactivate
+     * @param string $duration Duration: '1_day', '3_days', '7_days', '30_days', 'permanent'
+     * @return bool
+     */
+    public function deactivate($user_id, $duration = '1_day') {
+        $query = "UPDATE " . $this->table . " 
+                  SET deactivated_at = NOW(), 
+                      deactivated_until = :deactivated_until,
+                      updated_at = NOW() 
+                  WHERE id = :id";
+        
+        $stmt = $this->conn->prepare($query);
+        
+        // Calculate deactivated_until based on duration
+        $deactivated_until = null;
+        if ($duration !== 'permanent') {
+            $days = 1;
+            switch ($duration) {
+                case '1_day':
+                    $days = 1;
+                    break;
+                case '3_days':
+                    $days = 3;
+                    break;
+                case '7_days':
+                    $days = 7;
+                    break;
+                case '30_days':
+                    $days = 30;
+                    break;
+            }
+            $deactivated_until = date('Y-m-d H:i:s', strtotime("+{$days} days"));
+        }
+        
+        $stmt->bindParam(':deactivated_until', $deactivated_until);
+        $stmt->bindParam(':id', $user_id);
+        
+        return $stmt->execute();
+    }
+    
+    /**
+     * Reactivate user account
+     * @param int $user_id User ID to reactivate
+     * @return bool
+     */
+    public function reactivate($user_id) {
+        $query = "UPDATE " . $this->table . " 
+                  SET deactivated_at = NULL, 
+                      deactivated_until = NULL,
+                      updated_at = NOW() 
+                  WHERE id = :id";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':id', $user_id);
+        
+        return $stmt->execute();
     }
 }
 
